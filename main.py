@@ -1,123 +1,112 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from openpyxl import load_workbook
-
-# Chargement du fichier Excel
-@st.cache_data()
-def load_excel_file(file):
-    xls = pd.ExcelFile(file)
-    sheets = xls.sheet_names
-    data = {}
-    workbook = load_workbook(file)
-    for sheet in sheets:
-        sheet_data = workbook[sheet]
-        data[sheet] = pd.DataFrame(sheet_data.values)
-        data[sheet].columns = data[sheet].iloc[0]
-        data[sheet] = data[sheet][1:]
-    return data
-
-# Affichage des données du sheet sélectionné
-def display_sheet_data(sheet_data):
-    st.write("Données correspondant aux options choisies:")
-    st.dataframe(sheet_data)
-
-# Filtrer les données en fonction du niveau et de la classe
-def filter_sheet_data(sheet_data, niveau=None, classe=None):
-    filtered_data = sheet_data
-    if niveau is not None:
-        filtered_data = filtered_data[filtered_data['Niveau'] == niveau]
-    if classe is not None:
-        filtered_data = filtered_data[filtered_data['Classe'] == classe]
-    return filtered_data
 
 
-# Calcul du nombre d'étudiants n'ayant pas payé
-def calculate_unpaid_students(sheet_data):
-    unpaid_students = sheet_data[sheet_data['Montant'] > 0]
-    return len(unpaid_students)
-
-# Création du graphique de répartition
-def create_distribution_chart(sheet_data):
-    distribution = sheet_data['Niveau'].value_counts()
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(distribution.index, distribution.values)
-    ax.set_xlabel('Niveau')
-    ax.set_ylabel("Nombre d'étudiants")
-    ax.set_title('Répartition des étudiants par niveau')
-    st.pyplot(fig)
-
-# Création du graphique du total Montant par sheet
-def create_total_montant_chart(data):
-    sheet_names = list(data.keys())
-    total_montant = []
-    for sheet_name in sheet_names:
-        sheet_data = data[sheet_name]
-        total = sheet_data['Montant'].sum()
-        total_montant.append(total)
-
-    # Sort the sheet names and total montant in descending order
-    sheet_names, total_montant = zip(*sorted(zip(sheet_names, total_montant), key=lambda x: x[1], reverse=True))
-
-    fig, ax = plt.subplots(figsize=(15, 12))  # Adjust the figsize according to your preferences
-    plt.yticks(rotation=0)  # Rotate y-axis labels if needed
-    ax.barh(sheet_names, total_montant)
-
-    # Add labels on the right side of the bars
-    for i, v in enumerate(total_montant):
-        ax.text(v, i, f"{v:,} FCFA", ha='left', va='center')
-
-    ax.set_xlabel('Montant total')
-    ax.set_ylabel('Fillière')
-    ax.set_title('Montant total impayé par fillière (toute classe et tout niveau)')
-    st.pyplot(fig)
+def load_excel_data(file_path):
+    # Load the Excel file into a DataFrame
+    excel_data = pd.read_excel(file_path, sheet_name=None)
+    return excel_data
 
 
+def filter_unpaid_students(data, selected_sheet, selected_month):
+    # Select the specified sheet
+    sheet_data = data[selected_sheet]
 
-def main():
-    st.image('logo.jpeg')
-    st.markdown("<h1 style='text-align: center; color: black;'>Mon tableau de bord d'analyse automatisée</h1>", unsafe_allow_html=True)
-    file = st.file_uploader("Veuillez sélectionner le bon fichier excel", type=["xls", "xlsx"])
-    return file
+    # Select the necessary columns for processing
+    required_columns = ['NOM', 'PRENOMS', selected_month]
+    filtered_data = sheet_data[required_columns].copy()
+
+    # Replace None values with "Impayé" in the selected month
+    filtered_data[selected_month] = filtered_data[selected_month].fillna("Impayé")
+
+    # Filter students who haven't paid this month
+    unpaid_students = filtered_data[filtered_data[selected_month] == "Impayé"]
+
+    # Create a new column to expand the table
+    filtered_data['AUTRE_COLONNE'] = None
+
+    return unpaid_students, filtered_data
 
 
-# Chargement du fichier Excel
+import pandas as pd
 
-if __name__ =="__main__":
-    file = main()
-    if file is not None:
-        data = load_excel_file(file)
+def display_student_unpaid_months(data, student_name, month):
+    # Filter the data for the selected student
+    student_data = data[(data['NOM'] + ' ' + data['PRENOMS']) == student_name]
 
-        # Sélection du sheet
-        selected_sheet = st.selectbox("Sélectionnez le sheet", list(data.keys()))
+    # Replace None values with "Impayé" in the specified month
+    student_data[month] = student_data[month].fillna("Impayé")
 
-        # Filtrer par Niveau et Classe (options supplémentaires)
-        sheet_data = data[selected_sheet]
-        niveaux = sheet_data['Niveau'].unique()
-        classes = sheet_data['Classe'].unique()
+    # Check if the student has paid for the specified month
+    has_paid = student_data[month].values[0] != "Impayé"
 
-        selected_niveau = st.selectbox("Sélectionnez le niveau", [None] + list(niveaux))
-        selected_classe = st.selectbox("Sélectionnez la classe", [None] + list(classes))
-
-        # Filtrer les données en fonction du niveau et de la classe
-        filtered_data = filter_sheet_data(sheet_data, selected_niveau, selected_classe)
-
-        # Affichage des données filtrées
-        display_sheet_data(filtered_data)
-
-        # Calcul du nombre d'étudiants n'ayant pas payé
-        unpaid_count = calculate_unpaid_students(filtered_data)
-
-        if unpaid_count > 1:
-            st.write("Nombre d'étudiants n'ayant pas payé dans la fillière:", unpaid_count, "étudiants")
+    # Create a DataFrame to display the student's information and payment status
+    student_info = pd.DataFrame(columns=['Nom', 'Prénoms', 'Statut paiement'])
+    if not student_data.empty:
+        if has_paid:
+            student_info.loc[0] = [student_data['NOM'].values[0], student_data['PRENOMS'].values[0], "Payé"]
         else:
-            st.write("Nombre d'étudiants n'ayant pas payé dans la fillière:", unpaid_count, "étudiant")
+            student_info.loc[0] = [student_data['NOM'].values[0], student_data['PRENOMS'].values[0], "Impayé"]
+
+    return student_info
 
 
+# Create a sidebar for page selection
+def main():
+    page = st.sidebar.selectbox("Veuillez sélectionner une page", ["Analyse globale", "Analyse par étudiant"])
 
-     
-        # Création du graphique du total Montant par sheet
-        create_total_montant_chart(data)
+    if page == "Analyse globale":
+        st.image('logo.jpeg')
+        st.markdown("<h1 style='text-align: center; color: black;'>Mon tableau de bord d'analyse automatisée</h1>",
+                unsafe_allow_html=True)
+        # Home page content
+        uploaded_file = st.file_uploader("Veuillez sélectionner le bon fichier Excel", type=["xls", "xlsx"])
+        if uploaded_file:
+            # Load the Excel data into a DataFrame
+            excel_data = load_excel_data(uploaded_file)
+
+            # List the sheets in the Excel file
+            sheet_names = list(excel_data.keys())
+
+            st.title("Mon tableau de bord d'analyse automatisée")
+            st.write("Veuillez sélectionner ce que vous voulez faire.")
+
+            # Store the uploaded file and data in a session state
+            st.session_state.uploaded_file = uploaded_file
+            st.session_state.excel_data = excel_data
+            st.session_state.sheet_names = sheet_names
+
+            # Select the sheet for filtering unpaid students
+            st.session_state.selected_sheet = st.selectbox("Veuillez sélectionner uune classe", sheet_names)
+            selected_month = st.selectbox("Veuillez sélectionner un mois",
+                                        ['FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', "JUILlET","AOÛT","SEPTEMBRE","OCTOBRE"])
+            unpaid_students, filtered_data = filter_unpaid_students(excel_data, st.session_state.selected_sheet,
+                                                                    selected_month)
+            st.table(unpaid_students)
+
+    elif page == "Analyse par étudiant":
+        # Unpaid Months page content
+        st.title("Analyse par étudiant")
+        students_data = st.session_state.excel_data[st.session_state.selected_sheet]
+        student_names = students_data['NOM'] + ' ' + students_data['PRENOMS']
+        selected_student = st.selectbox("Veuillez sélectionner un étudiant", student_names)
+
+        if selected_student:
+            # Access the uploaded file and data from the session state
+            excel_data = st.session_state.excel_data
+            selected_month = st.selectbox("Veuillez sélectionner un mois",
+                                        ['FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',"JUILLET","AOÛT"])
+
+            # Filter unpaid students
+            unpaid_students, filtered_data = filter_unpaid_students(excel_data, st.session_state.selected_sheet,
+                                                                    selected_month)
+                                                                    
 
 
+            # Display the student's payment status
+            student_info = display_student_unpaid_months(filtered_data, selected_student, selected_month)
+            st.table(student_info)
 
+# Run the app
+if __name__ == "__main__":
+    main()
