@@ -79,7 +79,7 @@ def main():
             # Select the sheet for filtering unpaid students
             st.session_state.selected_sheet = st.selectbox("Veuillez sélectionner uune classe", sheet_names)
             selected_month = st.selectbox("Veuillez sélectionner un mois",
-                                        ['FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', "JUILlET","AOÛT","SEPTEMBRE","OCTOBRE"])
+                                        ['FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', "JUILLET","AOÛT","SEPTEMBRE","OCTOBRE"])
             unpaid_students, filtered_data = filter_unpaid_students(excel_data, st.session_state.selected_sheet,
                                                                     selected_month)
             st.table(unpaid_students)
